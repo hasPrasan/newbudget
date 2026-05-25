@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบริหารงบประมาณ SPA</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { fontFamily: { sans: ['Kanit', 'sans-serif'] } } }
+        }
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        .hidden-section { display: none !important; }
+        /* Loader CSS */
+        .loader-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.8); z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6;
+            border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <div id="globalLoader" class="loader-overlay hidden-section">
+        <div class="spinner"></div>
+        <p class="mt-2 text-sm font-medium text-blue-600">กำลังประมวลผล...</p>
+    </div>
+
+    <div id="loginScreen" class="fixed inset-0 bg-slate-800 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-11/12 max-w-md text-center">
+            <i data-lucide="wallet" class="w-12 h-12 text-blue-600 mx-auto mb-4"></i>
+            <h2 class="text-xl font-bold text-slate-700 mb-2">เข้าสู่ระบบงบประมาณ</h2>
+            <p class="text-xs text-gray-500 mb-6">กรุณากรอกอีเมลที่ลงทะเบียนไว้</p>
+            <div class="mb-4 text-left">
+                <input type="email" id="loginEmail" class="w-full border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="อีเมลของคุณ">
+            </div>
+            <button onclick="handleLogin()" class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg shadow hover:bg-blue-700 transition">เข้าสู่ระบบ</button>
+            <p id="loginError" class="text-red-500 text-xs mt-3 hidden bg-red-50 p-2 rounded"></p>
+            
+            <div class="mt-4 text-xs text-gray-400 bg-gray-50 p-2 rounded text-left">
+                <strong>ทดสอบระบบด้วย:</strong><br>
+                Admin: admin@test.com<br>
+                User: user@test.com
+            </div>
+        </div>
+    </div>
+
+    <aside id="sidebar" class="w-full md:w-64 bg-slate-800 text-white flex flex-col shadow-lg shrink-0 hidden-section absolute md:relative z-40 h-full transition-transform transform -translate-x-full md:translate-x-0">
+        <div class="p-4 flex justify-between items-center border-b border-slate-700">
+            <h1 class="font-bold text-lg tracking-wide flex items-center gap-2"><i data-lucide="calculator"></i> Budget SPA</h1>
+            <button class="md:hidden text-white" onclick="toggleSidebar()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="p-4 border-b border-slate-700 bg-slate-900">
+            <p class="text-xs text-slate-400">ผู้ใช้งาน:</p>
+            <p id="userEmailDisplay" class="font-medium text-sm truncate text-blue-300"></p>
+            <p id="userRoleDisplay" class="text-xs font-semibold mt-1"></p>
+            <button onclick="logout()" class="mt-2 text-xs text-red-400 hover:text-red-300 w-full text-left flex items-center gap-1"><i data-lucide="log-out" class="w-3 h-3"></i> ออกจากระบบ</button>
+        </div>
+        <div class="p-4 border-b border-slate-700">
+            <label class="text-xs text-slate-400 mb-1 block">ปีงบประมาณ</label>
+            <select id="globalYear" onchange="refreshAllData()" class="w-full bg-slate-700 text-white border border-slate-600 text-sm p-2 rounded outline-none">
+                <option value="2569">2569</option>
+                <option value="2570">2570</option>
+            </select>
+        </div>
+        <nav class="flex-1 overflow-y-auto py-2 text-sm flex flex-col">
+            <button onclick="navigate('dashboard')" class="nav-btn text-left px-4 py-3 hover:bg-slate-700 transition flex items-center gap-2 bg-slate-700 border-l-4 border-blue-500 text-blue-300" data-target="dashboard"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard</button>
+            <button onclick="navigate('budget')" class="nav-btn admin-only text-left px-4 py-3 hover:bg-slate-700 transition flex items-center gap-2" data-target="budget"><i data-lucide="file-text" class="w-4 h-4"></i> ส่วนที่ 1: งบตั้งต้น</button>
+            <button onclick="navigate('received')" class="nav-btn text-left px-4 py-3 hover:bg-slate-700 transition flex items-center gap-2" data-target="received"><i data-lucide="download" class="w-4 h-4"></i> ส่วนที่ 2: รับเงินจริง</button>
+            <button onclick="navigate('disburse')" class="nav-btn text-left px-4 py-3 hover:bg-slate-700 transition flex items-center gap-2" data-target="disburse"><i data-lucide="upload" class="w-4 h-4"></i> ส่วนที่ 3: เบิกจ่าย</button>
+            <button onclick="navigate('summary')" class="nav-btn text-left px-4 py-3 hover:bg-slate-700 transition flex items-center gap-2 text-yellow-400" data-target="summary"><i data-lucide="bar-chart-2" class="w-4 h-4"></i> สรุปโครงการ & Export</button>
+        </nav>
+    </aside>
+
+    <main id="mainApp" class="flex-1 flex flex-col h-full bg-gray-50 overflow-hidden hidden-section w-full relative">
+        <header class="md:hidden bg-slate-800 text-white p-3 flex justify-between items-center z-30 shadow">
+            <h1 class="font-bold text-sm tracking-wide">Budget SPA</h1>
+            <button onclick="toggleSidebar()"><i data-lucide="menu"></i></button>
+        </header>
+
+        <div class="flex-1 overflow-auto p-4 md:p-6 w-full">
+            
+            <section id="dashboard" class="content-section h-full flex flex-col gap-4">
+                <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="layout-dashboard"></i> Dashboard ภาพรวม</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div class="bg-white p-4 rounded-xl shadow-sm border h-[300px]">
+                        <h3 class="text-sm font-semibold text-center mb-2">เปรียบเทียบรับ-จ่าย รวมทั้งหมด</h3>
+                        <canvas id="chartPie"></canvas>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border h-[300px]">
+                        <h3 class="text-sm font-semibold text-center mb-2">แยกตามแหล่งงบประมาณ</h3>
+                        <canvas id="chartBar"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <section id="budget" class="content-section hidden-section h-full flex flex-col gap-4">
+                <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="file-text"></i> ส่วนที่ 1: งบประมาณตั้งต้น</h2>
+                <div class="bg-white p-4 rounded-xl shadow-sm border">
+                    <form id="budgetForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm" onsubmit="saveBudget(event)">
+                        <div><label class="block text-xs mb-1">กลุ่มงาน</label><input type="text" id="b_group" required class="w-full border rounded p-2"></div>
+                        <div class="md:col-span-2"><label class="block text-xs mb-1">กิจกรรม</label><input type="text" id="b_activity" required class="w-full border rounded p-2"></div>
+                        <div><label class="block text-xs mb-1">ยอดรวมตั้งต้น</label><input type="number" id="b_total" required class="w-full border rounded p-2" oninput="calcBalance()"></div>
+                        <div><label class="block text-xs mb-1">หักกรมฯ</label><input type="number" id="b_admin" value="0" class="w-full border rounded p-2" oninput="calcBalance()"></div>
+                        <div><label class="block text-xs mb-1">คงเหลือใช้ได้</label><input type="number" id="b_balance" readonly class="w-full border rounded p-2 bg-gray-100 font-bold text-green-600"></div>
+                        <div class="md:col-span-3 text-right"><button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700">บันทึกงบ</button></div>
+                    </form>
+                </div>
+                <div class="flex-1 bg-white rounded-xl shadow-sm border overflow-auto">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-gray-100 sticky top-0"><tr class="text-xs uppercase"><th class="p-3 border-b">กิจกรรม</th><th class="p-3 border-b text-right">ยอดรวม</th><th class="p-3 border-b text-right text-green-600">ใช้ได้จริง</th></tr></thead>
+                        <tbody id="budgetTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="received" class="content-section hidden-section h-full flex flex-col gap-4">
+                <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="download"></i> ส่วนที่ 2: บันทึกเงินรับจริง</h2>
+                <div class="bg-blue-50 p-4 rounded-xl shadow-sm border border-blue-100">
+                    <form id="receiveForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm" onsubmit="saveReceive(event)">
+                        <div><label class="block text-xs mb-1">วันที่รับ</label><input type="date" id="r_date" required class="w-full border rounded p-2"></div>
+                        <div class="md:col-span-2"><label class="block text-xs mb-1">กิจกรรม</label><select id="r_activity" required class="w-full border rounded p-2"><option value="">-- เลือก --</option></select></div>
+                        <div><label class="block text-xs mb-1">แหล่งงบ</label><select id="r_fund" required class="w-full border rounded p-2"><option value="งบดำเนินงานปกติ">งบดำเนินงานปกติ</option></select></div>
+                        <div><label class="block text-xs mb-1">ประเภท</label><input type="text" id="r_cat" required class="w-full border rounded p-2"></div>
+                        <div><label class="block text-xs mb-1">จำนวนเงิน</label><input type="number" id="r_amount" required class="w-full border rounded p-2"></div>
+                        <div class="md:col-span-2 flex items-end justify-end"><button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700 w-full md:w-auto">บันทึกรับเงิน</button></div>
+                    </form>
+                </div>
+                <div class="flex-1 bg-white rounded-xl shadow-sm border overflow-auto">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-gray-100 sticky top-0"><tr class="text-xs uppercase"><th class="p-3 border-b">วันที่</th><th class="p-3 border-b">กิจกรรม</th><th class="p-3 border-b text-right text-green-600">จำนวนเงิน</th></tr></thead>
+                        <tbody id="receiveTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="disburse" class="content-section hidden-section h-full flex flex-col gap-4">
+                <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="upload"></i> ส่วนที่ 3: บันทึกเบิกจ่าย</h2>
+                <div class="bg-orange-50 p-4 rounded-xl shadow-sm border border-orange-100">
+                    <form id="disburseForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm" onsubmit="saveDisburse(event)">
+                        <div><label class="block text-xs mb-1">วันที่เบิก</label><input type="date" id="d_date" required class="w-full border rounded p-2"></div>
+                        <div class="md:col-span-2"><label class="block text-xs mb-1">กิจกรรม</label><select id="d_activity" required class="w-full border rounded p-2"><option value="">-- เลือก --</option></select></div>
+                        <div><label class="block text-xs mb-1">แหล่งงบ</label><select id="d_fund" required class="w-full border rounded p-2"><option value="งบดำเนินงานปกติ">งบดำเนินงานปกติ</option></select></div>
+                        <div><label class="block text-xs mb-1">ประเภท</label><input type="text" id="d_cat" required class="w-full border rounded p-2"></div>
+                        <div><label class="block text-xs mb-1">จำนวนเงิน</label><input type="number" id="d_amount" required class="w-full border rounded p-2"></div>
+                        <div class="md:col-span-2"><label class="block text-xs mb-1">แนบสลิป/ใบเสร็จ (รูปภาพ)</label><input type="file" id="d_image" accept="image/*" class="w-full border rounded p-1.5 bg-white"></div>
+                        <div class="md:col-span-4 flex justify-end"><button type="submit" class="bg-orange-600 text-white px-6 py-2 rounded shadow hover:bg-orange-700">บันทึกเบิกจ่าย</button></div>
+                    </form>
+                </div>
+                <div class="flex-1 bg-white rounded-xl shadow-sm border overflow-auto">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-gray-100 sticky top-0"><tr class="text-xs uppercase"><th class="p-3 border-b">วันที่</th><th class="p-3 border-b">กิจกรรม</th><th class="p-3 border-b text-right text-red-500">จำนวนเงิน</th><th class="p-3 border-b text-center">หลักฐาน</th></tr></thead>
+                        <tbody id="disburseTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="summary" class="content-section hidden-section h-full flex flex-col gap-4">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border shrink-0">
+                    <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="bar-chart-2"></i> สรุปโครงการ</h2>
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <button onclick="exportExcel()" class="flex-1 bg-green-600 text-white px-4 py-2 rounded shadow flex items-center justify-center gap-2 text-sm"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel</button>
+                        <button onclick="exportPDF()" class="flex-1 bg-red-500 text-white px-4 py-2 rounded shadow flex items-center justify-center gap-2 text-sm"><i data-lucide="file-text" class="w-4 h-4"></i> PDF</button>
+                    </div>
+                </div>
+                
+                <div id="pdfContent" class="flex-1 bg-yellow-50/30 p-4 rounded-xl shadow-sm border overflow-auto">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="bg-green-100 p-4 rounded-xl border border-green-200 text-center"><p class="text-xs text-green-700 font-bold mb-1">รวมรับเงินจริง</p><p id="sumRec" class="text-2xl font-bold text-green-700">0.00</p></div>
+                        <div class="bg-red-100 p-4 rounded-xl border border-red-200 text-center"><p class="text-xs text-red-700 font-bold mb-1">รวมเบิกจ่ายจริง</p><p id="sumDis" class="text-2xl font-bold text-red-700">0.00</p></div>
+                        <div class="bg-blue-100 p-4 rounded-xl border border-blue-200 text-center"><p class="text-xs text-blue-800 font-bold mb-1">คงเหลือเบิกได้จริง</p><p id="sumBal" class="text-2xl font-bold text-blue-800">0.00</p></div>
+                    </div>
+                    <div class="bg-white rounded border overflow-hidden">
+                        <table id="exportTable" class="w-full text-left text-sm">
+                            <thead class="bg-gray-100 text-gray-600"><tr class="text-xs uppercase"><th class="p-2 border-b">แหล่งงบประมาณ</th><th class="p-2 border-b text-right text-green-700">รับแล้ว</th><th class="p-2 border-b text-right text-red-700">เบิกจ่ายแล้ว</th><th class="p-2 border-b text-right text-blue-700">คงเหลือ</th></tr></thead>
+                            <tbody id="summaryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // ==========================================
+        // 1. Supabase Initialization
+        // ==========================================
+        const SUPABASE_URL = 'https://kqvnxbzywpomeohvptxm.supabase.co'; 
+        const SUPABASE_KEY = 'sb_publishable_NbBd9DTRxZ9GsmDy4hcs5g_r-v1U5Q3';
+        const spClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // State variables
+        let currentUser = null;
+        let globalActivities = [];
+        let charts = {};
+
+        // ==========================================
+        // 2. UI & Navigation Logic
+        // ==========================================
+        function showLoader() { document.getElementById('globalLoader').classList.remove('hidden-section'); }
+        function hideLoader() { document.getElementById('globalLoader').classList.add('hidden-section'); }
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('-translate-x-full'); }
+        
+        function navigate(sectionId) {
+            document.querySelectorAll('.content-section').forEach(el => el.classList.add('hidden-section'));
+            document.getElementById(sectionId).classList.remove('hidden-section');
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-slate-700', 'border-l-4', 'border-blue-500', 'text-blue-300');
+                if(btn.dataset.target === sectionId) btn.classList.add('bg-slate-700', 'border-l-4', 'border-blue-500', 'text-blue-300');
+            });
+            if(window.innerWidth < 768) toggleSidebar();
+        }
+
+        // ==========================================
+        // 3. Authentication
+        // ==========================================
+        async function handleLogin() {
+            const email = document.getElementById('loginEmail').value.trim();
+            if(!email) return;
+            showLoader();
+            const { data, error } = await spClient.from('users').select('*').eq('email', email).single();
+            hideLoader();
+            
+            if (error || !data) {
+                const err = document.getElementById('loginError');
+                err.textContent = 'ไม่พบสิทธิ์การใช้งานสำหรับอีเมลนี้';
+                err.classList.remove('hidden');
+            } else {
+                currentUser = data;
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden-section');
+                document.getElementById('sidebar').classList.remove('hidden-section');
+                
+                document.getElementById('userEmailDisplay').textContent = currentUser.email;
+                document.getElementById('userRoleDisplay').textContent = `สิทธิ์: ${currentUser.role}`;
+                
+                if(currentUser.role !== 'Admin') {
+                    document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden-section'));
+                }
+                
+                initApp();
+            }
+        }
+        function logout() { location.reload(); }
+
+        // ==========================================
+        // 4. Core Functions
+        // ==========================================
+        async function initApp() {
+            showLoader();
+            await loadActivities();
+            await refreshAllData();
+            hideLoader();
+        }
+
+        async function refreshAllData() {
+            showLoader();
+            await Promise.all([ loadDashboard(), loadBudgets(), loadReceived(), loadDisbursements() ]);
+            updateSummary();
+            hideLoader();
+        }
+
+        async function loadActivities() {
+            const { data } = await spClient.from('settings').select('activity');
+            if(data) {
+                globalActivities = [...new Set(data.map(d => d.activity))];
+                const opts = '<option value="">-- เลือก --</option>' + globalActivities.map(a => `<option value="${a}">${a}</option>`).join('');
+                document.getElementById('r_activity').innerHTML = opts;
+                document.getElementById('d_activity').innerHTML = opts;
+            }
+        }
+
+        // ==========================================
+        // 5. Forms & Actions
+        // ==========================================
+        function calcBalance() {
+            const t = parseFloat(document.getElementById('b_total').value) || 0;
+            const a = parseFloat(document.getElementById('b_admin').value) || 0;
+            document.getElementById('b_balance').value = t - a;
+        }
+
+        async function saveBudget(e) {
+            e.preventDefault(); showLoader();
+            await spClient.from('budget_plan').insert([{
+                year: document.getElementById('globalYear').value,
+                group_name: document.getElementById('b_group').value,
+                activity: document.getElementById('b_activity').value,
+                total_budget: document.getElementById('b_total').value,
+                admin_fund: document.getElementById('b_admin').value,
+                balance: document.getElementById('b_balance').value
+            }]);
+            document.getElementById('budgetForm').reset();
+            await loadBudgets(); hideLoader();
+        }
+
+        async function saveReceive(e) {
+            e.preventDefault(); showLoader();
+            await spClient.from('received_funds').insert([{
+                year: document.getElementById('globalYear').value,
+                received_date: document.getElementById('r_date').value,
+                group_name: currentUser.group_name,
+                activity: document.getElementById('r_activity').value,
+                quarter: 'ไตรมาส 1',
+                fund_source: document.getElementById('r_fund').value,
+                sub_category: document.getElementById('r_cat').value,
+                amount: document.getElementById('r_amount').value
+            }]);
+            document.getElementById('receiveForm').reset();
+            await loadReceived(); await loadDashboard(); hideLoader();
+        }
+
+        // --- Image Compression and Upload Logic ---
+        async function saveDisburse(e) {
+            e.preventDefault(); showLoader();
+            let receiptUrl = null;
+            const fileInput = document.getElementById('d_image');
+            
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                try {
+                    // 1. Compress Image
+                    const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true };
+                    const compressedFile = await imageCompression(file, options);
+                    
+                    // 2. Upload to Supabase Storage
+                    const fileName = `${Date.now()}_${compressedFile.name}`;
+                    const { data, error } = await spClient.storage.from('receipts').upload(fileName, compressedFile);
+                    
+                    if(!error) {
+                        const { data: publicUrlData } = spClient.storage.from('receipts').getPublicUrl(fileName);
+                        receiptUrl = publicUrlData.publicUrl;
+                    }
+                } catch (error) { console.error("Upload error", error); }
+            }
+
+            await spClient.from('disbursements').insert([{
+                year: document.getElementById('globalYear').value,
+                disbursed_date: document.getElementById('d_date').value,
+                group_name: currentUser.group_name,
+                activity: document.getElementById('d_activity').value,
+                fund_source: document.getElementById('d_fund').value,
+                sub_category: document.getElementById('d_cat').value,
+                amount: document.getElementById('d_amount').value,
+                receipt_url: receiptUrl
+            }]);
+            document.getElementById('disburseForm').reset();
+            await loadDisbursements(); await loadDashboard(); hideLoader();
+        }
+
+        // ==========================================
+        // 6. Data Fetching & Rendering
+        // ==========================================
+        async function loadBudgets() {
+            const { data } = await spClient.from('budget_plan').select('*').eq('year', document.getElementById('globalYear').value);
+            const tbody = document.getElementById('budgetTableBody');
+            tbody.innerHTML = (data || []).map(d => `
+                <tr class="hover:bg-gray-50 border-b">
+                    <td class="p-3 truncate max-w-xs">${d.activity}</td>
+                    <td class="p-3 text-right">${Number(d.total_budget).toLocaleString()}</td>
+                    <td class="p-3 text-right text-green-600 font-medium">${Number(d.balance).toLocaleString()}</td>
+                </tr>`).join('') || '<tr><td colspan="3" class="p-4 text-center text-gray-400">ไม่มีข้อมูล</td></tr>';
+        }
+
+        async function loadReceived() {
+            let query = spClient.from('received_funds').select('*').eq('year', document.getElementById('globalYear').value);
+            if(currentUser.role !== 'Admin') query = query.eq('group_name', currentUser.group_name);
+            const { data } = await query;
+            window.tempReceived = data || []; // Store for summary
+            
+            const tbody = document.getElementById('receiveTableBody');
+            tbody.innerHTML = (data || []).map(d => `
+                <tr class="hover:bg-blue-50 border-b">
+                    <td class="p-3">${d.received_date}</td>
+                    <td class="p-3 truncate max-w-xs">${d.activity}</td>
+                    <td class="p-3 text-right text-green-600 font-medium">${Number(d.amount).toLocaleString()}</td>
+                </tr>`).join('') || '<tr><td colspan="3" class="p-4 text-center text-gray-400">ไม่มีข้อมูล</td></tr>';
+        }
+
+        async function loadDisbursements() {
+            let query = spClient.from('disbursements').select('*').eq('year', document.getElementById('globalYear').value);
+            if(currentUser.role !== 'Admin') query = query.eq('group_name', currentUser.group_name);
+            const { data } = await query;
+            window.tempDisburse = data || []; // Store for summary
+            
+            const tbody = document.getElementById('disburseTableBody');
+            tbody.innerHTML = (data || []).map(d => {
+                // Error handling for image fallback via CSS/HTML alt
+                const imgTag = d.receipt_url ? `<a href="${d.receipt_url}" target="_blank" class="text-blue-500 hover:underline"><img src="${d.receipt_url}" alt="รูปโหลดไม่ได้" class="h-8 w-8 object-cover rounded inline border" onerror="this.outerHTML='<span class=\\'text-xs text-red-400\\'>ภาพเสีย</span>'"></a>` : '<span class="text-xs text-gray-400">ไม่มี</span>';
+                return `
+                <tr class="hover:bg-orange-50 border-b">
+                    <td class="p-3">${d.disbursed_date}</td>
+                    <td class="p-3 truncate max-w-xs">${d.activity}</td>
+                    <td class="p-3 text-right text-red-500 font-medium">${Number(d.amount).toLocaleString()}</td>
+                    <td class="p-3 text-center">${imgTag}</td>
+                </tr>`
+            }).join('') || '<tr><td colspan="4" class="p-4 text-center text-gray-400">ไม่มีข้อมูล</td></tr>';
+        }
+
+        // ==========================================
+        // 7. Dashboard & Summary
+        // ==========================================
+        async function loadDashboard() {
+            if(!window.tempReceived || !window.tempDisburse) return;
+            const recTotal = window.tempReceived.reduce((sum, item) => sum + Number(item.amount), 0);
+            const disTotal = window.tempDisburse.reduce((sum, item) => sum + Number(item.amount), 0);
+            
+            if(charts.pie) charts.pie.destroy();
+            charts.pie = new Chart(document.getElementById('chartPie'), {
+                type: 'doughnut',
+                data: { labels: ['รับเงินจริง', 'เบิกจ่าย'], datasets: [{ data: [recTotal, disTotal], backgroundColor: ['#10b981', '#ef4444'] }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            if(charts.bar) charts.bar.destroy();
+            charts.bar = new Chart(document.getElementById('chartBar'), {
+                type: 'bar',
+                data: { labels: ['งบดำเนินงานปกติ'], datasets: [{ label: 'เบิกจ่าย', data: [disTotal], backgroundColor: '#ef4444' }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function updateSummary() {
+            const rec = window.tempReceived || [];
+            const dis = window.tempDisburse || [];
+            const rSum = rec.reduce((a, b) => a + Number(b.amount), 0);
+            const dSum = dis.reduce((a, b) => a + Number(b.amount), 0);
+            
+            document.getElementById('sumRec').textContent = rSum.toLocaleString();
+            document.getElementById('sumDis').textContent = dSum.toLocaleString();
+            document.getElementById('sumBal').textContent = (rSum - dSum).toLocaleString();
+
+            document.getElementById('summaryTableBody').innerHTML = `
+                <tr class="border-b"><td class="p-3">งบดำเนินงานปกติ</td><td class="p-3 text-right text-green-600">${rSum.toLocaleString()}</td><td class="p-3 text-right text-red-500">${dSum.toLocaleString()}</td><td class="p-3 text-right font-bold text-blue-700">${(rSum-dSum).toLocaleString()}</td></tr>
+            `;
+        }
+
+        // ==========================================
+        // 8. Exports
+        // ==========================================
+        function exportExcel() {
+            const wb = XLSX.utils.table_to_book(document.getElementById('exportTable'), {sheet:"Summary"});
+            XLSX.writeFile(wb, `Report_${document.getElementById('globalYear').value}.xlsx`);
+        }
+        function exportPDF() {
+            const el = document.getElementById('pdfContent');
+            html2pdf().set({ margin: 0.5, filename: 'Report.pdf', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' } }).from(el).save();
+        }
+    </script>
+</body>
+</html>
