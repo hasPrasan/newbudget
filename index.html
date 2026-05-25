@@ -150,7 +150,12 @@
     
     <div class="bg-white p-4 rounded-xl shadow-sm border">
         <form id="budgetForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm" onsubmit="saveBudget(event)">
-            <div class="md:col-span-2"><label class="block text-xs mb-1">กลุ่มงาน</label><input type="text" id="b_group" required class="w-full border rounded p-2"></div>
+            <div class="md:col-span-2">
+				<label class="block text-xs mb-1">กลุ่มงาน</label>
+				<select id="b_group" required class="w-full border rounded p-2 bg-white outline-none focus:ring-2 focus:ring-blue-500">
+				<option value="">-- กำลังโหลดกลุ่มงาน... --</option>
+    </select>
+			</div>
             <div class="md:col-span-2"><label class="block text-xs mb-1">กิจกรรม</label><input type="text" id="b_activity" required class="w-full border rounded p-2"></div>
             
             <div><label class="block text-xs mb-1">ยอดงบตามคำขอ</label><input type="number" id="b_total" required class="w-full border rounded p-2" oninput="calcBalance()"></div>
@@ -390,14 +395,33 @@
         }
 
         async function loadActivities() {
-            const { data } = await spClient.from('settings').select('activity');
-            if(data) {
-                globalActivities = [...new Set(data.map(d => d.activity))];
-                const opts = '<option value="">-- เลือก --</option>' + globalActivities.map(a => `<option value="${a}">${a}</option>`).join('');
-                document.getElementById('r_activity').innerHTML = opts;
-                document.getElementById('d_activity').innerHTML = opts;
-            }
-        }
+    // 1. ดึงข้อมูล "กลุ่มงาน" จากตาราง users
+    const { data: usersData } = await spClient.from('users').select('group_name');
+    
+    if (usersData) {
+        // ใช้ Set เพื่อกรองชื่อกลุ่มงานที่ซ้ำกันออก ให้เหลือแค่ชื่อละ 1 อัน
+        const uniqueGroups = [...new Set(usersData.map(u => u.group_name))];
+        
+        // สร้าง HTML Option สำหรับ Dropdown
+        const groupOpts = '<option value="">-- เลือกกลุ่มงาน --</option>' + 
+                          uniqueGroups.map(g => `<option value="${g}">${g}</option>`).join('');
+                          
+        // นำไปแสดงใน Dropdown b_group ของส่วนที่ 1
+        const bGroupSelect = document.getElementById('b_group');
+        if (bGroupSelect) bGroupSelect.innerHTML = groupOpts;
+    }
+
+    // 2. ดึงข้อมูล "กิจกรรม" จากตาราง settings (ของเดิม)
+    const { data: settingsData } = await spClient.from('settings').select('activity');
+    if (settingsData) {
+        globalActivities = [...new Set(settingsData.map(d => d.activity))];
+        const actOpts = '<option value="">-- เลือกกิจกรรม --</option>' + 
+                        globalActivities.map(a => `<option value="${a}">${a}</option>`).join('');
+                        
+        document.getElementById('r_activity').innerHTML = actOpts;
+        document.getElementById('d_activity').innerHTML = actOpts;
+    }
+}
 
         // ==========================================
         // 5. Forms & Actions
