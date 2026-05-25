@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ระบบบริหารงบประมาณ SPA</title>
     
+    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -14,6 +16,7 @@
         }
     </script>
     
+    <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -38,30 +41,55 @@
 </head>
 <body class="bg-gray-50 text-gray-800 h-screen flex flex-col md:flex-row overflow-hidden">
 
+    <!-- Global Loader -->
     <div id="globalLoader" class="loader-overlay hidden-section">
         <div class="spinner"></div>
         <p class="mt-2 text-sm font-medium text-blue-600">กำลังประมวลผล...</p>
     </div>
 
+    <!-- Login/Register Screen -->
     <div id="loginScreen" class="fixed inset-0 bg-slate-800 flex items-center justify-center z-50">
-        <div class="bg-white p-8 rounded-lg shadow-xl w-11/12 max-w-md text-center">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-11/12 max-w-md text-center">
             <i data-lucide="wallet" class="w-12 h-12 text-blue-600 mx-auto mb-4"></i>
-            <h2 class="text-xl font-bold text-slate-700 mb-2">เข้าสู่ระบบงบประมาณ</h2>
-            <p class="text-xs text-gray-500 mb-6">กรุณากรอกอีเมลที่ลงทะเบียนไว้</p>
-            <div class="mb-4 text-left">
-                <input type="email" id="loginEmail" class="w-full border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="อีเมลของคุณ">
-            </div>
-            <button onclick="handleLogin()" class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg shadow hover:bg-blue-700 transition">เข้าสู่ระบบ</button>
-            <p id="loginError" class="text-red-500 text-xs mt-3 hidden bg-red-50 p-2 rounded"></p>
+            <h2 id="authTitle" class="text-xl font-bold text-slate-700 mb-2">เข้าสู่ระบบงบประมาณ</h2>
+            <p id="authDesc" class="text-xs text-gray-500 mb-6">กรุณากรอกอีเมลที่ลงทะเบียนไว้</p>
             
-            <div class="mt-4 text-xs text-gray-400 bg-gray-50 p-2 rounded text-left">
-                <strong>ทดสอบระบบด้วย:</strong><br>
-                Admin: admin@test.com<br>
-                User: user@test.com
+            <!-- Login Form -->
+            <div id="loginFormContainer">
+                <div class="mb-4 text-left">
+                    <input type="email" id="loginEmail" class="w-full border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="อีเมลของคุณ">
+                </div>
+                <button onclick="handleLogin()" class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg shadow hover:bg-blue-700 transition">เข้าสู่ระบบ</button>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerFormContainer" class="hidden-section">
+                <div class="mb-3 text-left">
+                    <input type="email" id="regEmail" class="w-full border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="อีเมลที่ต้องการลงทะเบียน">
+                </div>
+                <div class="mb-3 text-left">
+                    <input type="text" id="regGroup" class="w-full border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุกลุ่มงาน (เช่น ฝ่ายบริหารทั่วไป)">
+                </div>
+                <div class="mb-4 text-left">
+                    <select id="regRole" class="w-full border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
+                        <option value="User">User (ผู้ใช้งานทั่วไป)</option>
+                        <option value="Admin">Admin (ผู้ดูแลระบบ)</option>
+                    </select>
+                </div>
+                <button onclick="handleRegister()" class="w-full bg-green-600 text-white font-bold py-2 rounded-lg shadow hover:bg-green-700 transition">ลงทะเบียนใช้งาน</button>
+            </div>
+
+            <p id="authError" class="text-red-500 text-xs mt-3 hidden-section bg-red-50 p-2 rounded"></p>
+            
+            <!-- Toggle Auth Mode -->
+            <div class="mt-4 flex justify-center gap-2 text-sm border-t pt-4">
+                <button id="toggleLoginBtn" onclick="toggleAuthMode('login')" class="text-gray-400 hidden-section hover:text-blue-600 transition">มีบัญชีแล้ว? เข้าสู่ระบบ</button>
+                <button id="toggleRegBtn" onclick="toggleAuthMode('register')" class="text-gray-500 hover:text-blue-600 transition">ยังไม่มีบัญชี? ลงทะเบียน</button>
             </div>
         </div>
     </div>
 
+    <!-- Sidebar -->
     <aside id="sidebar" class="w-full md:w-64 bg-slate-800 text-white flex flex-col shadow-lg shrink-0 hidden-section absolute md:relative z-40 h-full transition-transform transform -translate-x-full md:translate-x-0">
         <div class="p-4 flex justify-between items-center border-b border-slate-700">
             <h1 class="font-bold text-lg tracking-wide flex items-center gap-2"><i data-lucide="calculator"></i> Budget SPA</h1>
@@ -76,7 +104,8 @@
         <div class="p-4 border-b border-slate-700">
             <label class="text-xs text-slate-400 mb-1 block">ปีงบประมาณ</label>
             <select id="globalYear" onchange="refreshAllData()" class="w-full bg-slate-700 text-white border border-slate-600 text-sm p-2 rounded outline-none">
-                <option value="2569">2569</option>
+                <option value="2569">2568</option>
+				<option value="2569">2569</option>
                 <option value="2570">2570</option>
             </select>
         </div>
@@ -89,14 +118,18 @@
         </nav>
     </aside>
 
+    <!-- Main Content -->
     <main id="mainApp" class="flex-1 flex flex-col h-full bg-gray-50 overflow-hidden hidden-section w-full relative">
+        <!-- Mobile Header -->
         <header class="md:hidden bg-slate-800 text-white p-3 flex justify-between items-center z-30 shadow">
             <h1 class="font-bold text-sm tracking-wide">Budget SPA</h1>
             <button onclick="toggleSidebar()"><i data-lucide="menu"></i></button>
         </header>
 
+        <!-- Dynamic Content Area -->
         <div class="flex-1 overflow-auto p-4 md:p-6 w-full">
             
+            <!-- Dashboard Section -->
             <section id="dashboard" class="content-section h-full flex flex-col gap-4">
                 <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="layout-dashboard"></i> Dashboard ภาพรวม</h2>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -111,26 +144,43 @@
                 </div>
             </section>
 
+            <!-- Budget Plan Section -->
             <section id="budget" class="content-section hidden-section h-full flex flex-col gap-4">
-                <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="file-text"></i> ส่วนที่ 1: งบประมาณตั้งต้น</h2>
-                <div class="bg-white p-4 rounded-xl shadow-sm border">
-                    <form id="budgetForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm" onsubmit="saveBudget(event)">
-                        <div><label class="block text-xs mb-1">กลุ่มงาน</label><input type="text" id="b_group" required class="w-full border rounded p-2"></div>
-                        <div class="md:col-span-2"><label class="block text-xs mb-1">กิจกรรม</label><input type="text" id="b_activity" required class="w-full border rounded p-2"></div>
-                        <div><label class="block text-xs mb-1">ยอดรวมตั้งต้น</label><input type="number" id="b_total" required class="w-full border rounded p-2" oninput="calcBalance()"></div>
-                        <div><label class="block text-xs mb-1">หักกรมฯ</label><input type="number" id="b_admin" value="0" class="w-full border rounded p-2" oninput="calcBalance()"></div>
-                        <div><label class="block text-xs mb-1">คงเหลือใช้ได้</label><input type="number" id="b_balance" readonly class="w-full border rounded p-2 bg-gray-100 font-bold text-green-600"></div>
-                        <div class="md:col-span-3 text-right"><button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700">บันทึกงบ</button></div>
-                    </form>
-                </div>
-                <div class="flex-1 bg-white rounded-xl shadow-sm border overflow-auto">
-                    <table class="w-full text-left text-sm whitespace-nowrap">
-                        <thead class="bg-gray-100 sticky top-0"><tr class="text-xs uppercase"><th class="p-3 border-b">กิจกรรม</th><th class="p-3 border-b text-right">ยอดรวม</th><th class="p-3 border-b text-right text-green-600">ใช้ได้จริง</th></tr></thead>
-                        <tbody id="budgetTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
+    <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="file-text"></i> ส่วนที่ 1: งบประมาณตั้งต้น</h2>
+    
+    <div class="bg-white p-4 rounded-xl shadow-sm border">
+        <form id="budgetForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm" onsubmit="saveBudget(event)">
+            <div class="md:col-span-2"><label class="block text-xs mb-1">กลุ่มงาน</label><input type="text" id="b_group" required class="w-full border rounded p-2"></div>
+            <div class="md:col-span-2"><label class="block text-xs mb-1">กิจกรรม</label><input type="text" id="b_activity" required class="w-full border rounded p-2"></div>
+            
+            <div><label class="block text-xs mb-1">ยอดงบตามคำขอ</label><input type="number" id="b_total" required class="w-full border rounded p-2" oninput="calcBalance()"></div>
+            <div><label class="block text-xs mb-1 text-orange-600">เงินบริหาร กรมฯ 7%</label><input type="number" id="b_admin" value="0" class="w-full border rounded p-2" oninput="calcBalance()"></div>
+            <div><label class="block text-xs mb-1 text-blue-600">รวมโอน E-bud</label><input type="number" id="b_ebud" value="0" class="w-full border rounded p-2" oninput="calcBalance()"></div>
+            <div><label class="block text-xs mb-1 text-purple-600">เงินบริหาร สคบ.</label><input type="number" id="b_skb" value="0" class="w-full border rounded p-2" oninput="calcBalance()"></div>
+            
+            <div class="md:col-span-2"><label class="block text-xs mb-1 text-green-700 font-bold">คงเหลือใช้ระหว่างปี</label><input type="number" id="b_balance" readonly class="w-full border rounded p-2 bg-green-50 font-bold text-green-700 outline-none"></div>
+            <div class="md:col-span-2 flex items-end justify-end"><button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700 w-full md:w-auto">บันทึกงบ</button></div>
+        </form>
+    </div>
 
+    <div class="flex-1 bg-white rounded-xl shadow-sm border overflow-auto">
+        <table class="w-full text-left text-sm whitespace-nowrap">
+            <thead class="bg-gray-100 sticky top-0">
+                <tr class="text-xs uppercase">
+                    <th class="p-3 border-b">กิจกรรม</th>
+                    <th class="p-3 border-b text-right">ยอดขอ</th>
+                    <th class="p-3 border-b text-right text-orange-600">หักกรมฯ 7%</th>
+                    <th class="p-3 border-b text-right text-blue-600">โอน E-bud</th>
+                    <th class="p-3 border-b text-right text-purple-600">หัก สคบ.</th>
+                    <th class="p-3 border-b text-right text-green-700">คงเหลือใช้ได้</th>
+                </tr>
+            </thead>
+            <tbody id="budgetTableBody"></tbody>
+        </table>
+    </div>
+</section>
+
+            <!-- Receive Funds Section -->
             <section id="received" class="content-section hidden-section h-full flex flex-col gap-4">
                 <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="download"></i> ส่วนที่ 2: บันทึกเงินรับจริง</h2>
                 <div class="bg-blue-50 p-4 rounded-xl shadow-sm border border-blue-100">
@@ -151,6 +201,7 @@
                 </div>
             </section>
 
+            <!-- Disbursements Section with Image Upload -->
             <section id="disburse" class="content-section hidden-section h-full flex flex-col gap-4">
                 <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="upload"></i> ส่วนที่ 3: บันทึกเบิกจ่าย</h2>
                 <div class="bg-orange-50 p-4 rounded-xl shadow-sm border border-orange-100">
@@ -172,6 +223,7 @@
                 </div>
             </section>
 
+            <!-- Summary & Export Section -->
             <section id="summary" class="content-section hidden-section h-full flex flex-col gap-4">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border shrink-0">
                     <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2"><i data-lucide="bar-chart-2"></i> สรุปโครงการ</h2>
@@ -199,6 +251,7 @@
         </div>
     </main>
 
+    <!-- Main Application Logic -->
     <script>
         // Initialize Icons
         lucide.createIcons();
@@ -210,7 +263,7 @@
         const SUPABASE_KEY = 'sb_publishable_NbBd9DTRxZ9GsmDy4hcs5g_r-v1U5Q3';
         const spClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // State variables
+ // State variables
         let currentUser = null;
         let globalActivities = [];
         let charts = {};
@@ -232,23 +285,45 @@
             if(window.innerWidth < 768) toggleSidebar();
         }
 
+        function toggleAuthMode(mode) {
+            const err = document.getElementById('authError');
+            err.classList.add('hidden-section');
+            
+            if (mode === 'login') {
+                document.getElementById('loginFormContainer').classList.remove('hidden-section');
+                document.getElementById('registerFormContainer').classList.add('hidden-section');
+                document.getElementById('toggleLoginBtn').classList.add('hidden-section');
+                document.getElementById('toggleRegBtn').classList.remove('hidden-section');
+                document.getElementById('authTitle').textContent = 'เข้าสู่ระบบงบประมาณ';
+                document.getElementById('authDesc').textContent = 'กรุณากรอกอีเมลที่ลงทะเบียนไว้';
+            } else {
+                document.getElementById('loginFormContainer').classList.add('hidden-section');
+                document.getElementById('registerFormContainer').classList.remove('hidden-section');
+                document.getElementById('toggleLoginBtn').classList.remove('hidden-section');
+                document.getElementById('toggleRegBtn').classList.add('hidden-section');
+                document.getElementById('authTitle').textContent = 'ลงทะเบียนผู้ใช้งานใหม่';
+                document.getElementById('authDesc').textContent = 'กรอกข้อมูลเพื่อสร้างบัญชีสำหรับเข้าใช้งานระบบ';
+            }
+        }
+
         // ==========================================
-        // 3. Authentication
+        // 3. Authentication (Login & Register)
         // ==========================================
         async function handleLogin() {
             const email = document.getElementById('loginEmail').value.trim();
+            const err = document.getElementById('authError');
             if(!email) return;
+            
             showLoader();
             const { data, error } = await spClient.from('users').select('*').eq('email', email).single();
             hideLoader();
             
             if (error || !data) {
-                const err = document.getElementById('loginError');
-                err.textContent = 'ไม่พบสิทธิ์การใช้งานสำหรับอีเมลนี้';
-                err.classList.remove('hidden');
+                err.textContent = 'ไม่พบสิทธิ์การใช้งานสำหรับอีเมลนี้ กรุณาลงทะเบียนก่อน';
+                err.classList.remove('hidden-section');
             } else {
                 currentUser = data;
-                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('loginScreen').classList.add('hidden-section');
                 document.getElementById('mainApp').classList.remove('hidden-section');
                 document.getElementById('sidebar').classList.remove('hidden-section');
                 
@@ -262,6 +337,39 @@
                 initApp();
             }
         }
+
+        async function handleRegister() {
+            const email = document.getElementById('regEmail').value.trim();
+            const group = document.getElementById('regGroup').value.trim();
+            const role = document.getElementById('regRole').value;
+            const err = document.getElementById('authError');
+
+            if(!email || !group) {
+                err.textContent = 'กรุณากรอกข้อมูลให้ครบถ้วน';
+                err.classList.remove('hidden-section');
+                return;
+            }
+
+            showLoader();
+            const { data, error } = await spClient.from('users').insert([{
+                email: email,
+                group_name: group,
+                role: role
+            }]);
+            hideLoader();
+
+            if (error) {
+                err.textContent = 'การลงทะเบียนล้มเหลว (อีเมลนี้อาจมีในระบบแล้ว)';
+                err.classList.remove('hidden-section');
+            } else {
+                alert('ลงทะเบียนสำเร็จ! ระบบจะพากลับไปหน้าเข้าสู่ระบบ');
+                document.getElementById('regEmail').value = '';
+                document.getElementById('regGroup').value = '';
+                document.getElementById('loginEmail').value = email;
+                toggleAuthMode('login');
+            }
+        }
+
         function logout() { location.reload(); }
 
         // ==========================================
@@ -295,24 +403,29 @@
         // 5. Forms & Actions
         // ==========================================
         function calcBalance() {
-            const t = parseFloat(document.getElementById('b_total').value) || 0;
-            const a = parseFloat(document.getElementById('b_admin').value) || 0;
-            document.getElementById('b_balance').value = t - a;
-        }
+    const t = parseFloat(document.getElementById('b_total').value) || 0;
+    const a = parseFloat(document.getElementById('b_admin').value) || 0;
+    const e = parseFloat(document.getElementById('b_ebud').value) || 0;
+    const s = parseFloat(document.getElementById('b_skb').value) || 0;
+    // คำนวณคงเหลือ: ยอดขอ - 7% - E-bud - สคบ.
+    document.getElementById('b_balance').value = t - a - e - s;
+}
 
         async function saveBudget(e) {
-            e.preventDefault(); showLoader();
-            await spClient.from('budget_plan').insert([{
-                year: document.getElementById('globalYear').value,
-                group_name: document.getElementById('b_group').value,
-                activity: document.getElementById('b_activity').value,
-                total_budget: document.getElementById('b_total').value,
-                admin_fund: document.getElementById('b_admin').value,
-                balance: document.getElementById('b_balance').value
-            }]);
-            document.getElementById('budgetForm').reset();
-            await loadBudgets(); hideLoader();
-        }
+    e.preventDefault(); showLoader();
+    await spClient.from('budget_plan').insert([{
+        year: document.getElementById('globalYear').value,
+        group_name: document.getElementById('b_group').value,
+        activity: document.getElementById('b_activity').value,
+        total_budget: document.getElementById('b_total').value,
+        admin_fund: document.getElementById('b_admin').value,
+        allocated: document.getElementById('b_ebud').value, // เพิ่ม e-bud
+        admin_fund_skb: document.getElementById('b_skb').value, // เพิ่ม สคบ.
+        balance: document.getElementById('b_balance').value
+    }]);
+    document.getElementById('budgetForm').reset();
+    await loadBudgets(); hideLoader();
+}
 
         async function saveReceive(e) {
             e.preventDefault(); showLoader();
@@ -372,15 +485,18 @@
         // 6. Data Fetching & Rendering
         // ==========================================
         async function loadBudgets() {
-            const { data } = await spClient.from('budget_plan').select('*').eq('year', document.getElementById('globalYear').value);
-            const tbody = document.getElementById('budgetTableBody');
-            tbody.innerHTML = (data || []).map(d => `
-                <tr class="hover:bg-gray-50 border-b">
-                    <td class="p-3 truncate max-w-xs">${d.activity}</td>
-                    <td class="p-3 text-right">${Number(d.total_budget).toLocaleString()}</td>
-                    <td class="p-3 text-right text-green-600 font-medium">${Number(d.balance).toLocaleString()}</td>
-                </tr>`).join('') || '<tr><td colspan="3" class="p-4 text-center text-gray-400">ไม่มีข้อมูล</td></tr>';
-        }
+    const { data } = await spClient.from('budget_plan').select('*').eq('year', document.getElementById('globalYear').value);
+    const tbody = document.getElementById('budgetTableBody');
+    tbody.innerHTML = (data || []).map(d => `
+        <tr class="hover:bg-gray-50 border-b">
+            <td class="p-3 truncate max-w-xs">${d.activity}</td>
+            <td class="p-3 text-right">${Number(d.total_budget).toLocaleString()}</td>
+            <td class="p-3 text-right text-orange-600">${Number(d.admin_fund).toLocaleString()}</td>
+            <td class="p-3 text-right text-blue-600">${Number(d.allocated).toLocaleString()}</td>
+            <td class="p-3 text-right text-purple-600">${Number(d.admin_fund_skb).toLocaleString()}</td>
+            <td class="p-3 text-right text-green-700 font-bold">${Number(d.balance).toLocaleString()}</td>
+        </tr>`).join('') || '<tr><td colspan="6" class="p-4 text-center text-gray-400">ไม่มีข้อมูล</td></tr>';
+}
 
         async function loadReceived() {
             let query = spClient.from('received_funds').select('*').eq('year', document.getElementById('globalYear').value);
